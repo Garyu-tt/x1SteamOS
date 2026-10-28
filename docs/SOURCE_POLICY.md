@@ -4,6 +4,10 @@
 
 This repo tracks the complete **delta sources** for Enigma against an exact public Linux-NX Git commit, reproducible checkout helper, a kernel configuration snapshot, diagnostic scripts, hardware evidence summaries and experiment history. `fetch-enigma.sh` reconstructs a full kernel source tree.
 
+## Direct source-file snapshots
+
+`source-snapshots/r20/` contains all 16 complete kernel source files touched by the verified R20 patch series. They were exported from a temporary Git index populated with the exact upstream commit and the R20 base + LTSSM patches, not copied from an unrelated experimental checkout. They are for navigation and review; **apply the patch series to upstream for any actual build**.
+
 ## What is deliberately not included
 
 - Many gigabytes of duplicate Linux checkouts, build caches and intermediate objects.

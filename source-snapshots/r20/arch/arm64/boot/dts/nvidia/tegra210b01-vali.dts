@@ -1,0 +1,175 @@
+// SPDX-License-Identifier: GPL-2.0
+/dts-v1/;
+
+#include "tegra210b01-nx.dtsi"
+
+/ {
+	model = "Nintendo Switch Lite";
+	compatible = "nvidia,vali", "nintendo,hoag", "nintendo,nx", "nvidia,tegra210b01", "nvidia,tegra210";
+
+    /* Joycon/Fan power (usb) */
+	v_vdd50_b: v-vdd50-b {
+		status = "disabled"; /* Only enabled on Odin/Modin */
+	};
+
+	en_vdd_jcl_chgr: left-joycon-charger {
+		status = "disabled"; /* Only enabled on Odin/Modin/Fric */
+	};
+
+	en_vdd_jcr_chgr: right-joycon-charger {
+		status = "disabled"; /* Only enabled on Odin/Modin/Fric */
+	};
+
+	spi@7000da00 {
+		status = "disabled"; /* Disabled for Vali since Sio uses it */
+	};
+
+	/* Right Joycon */
+	serial@70006040 {
+		status = "disabled";
+
+		joyconr {
+			status = "disabled";
+		};
+	};
+
+	/* Left Joycon / Sio */
+	serial@70006200 {
+		status = "okay";
+		/delete-property/ nvidia,invert-txd;
+		/delete-property/ nvidia,invert-rts;
+
+		joyconl {
+			status = "disabled";
+		};
+
+		sio {
+			status = "okay";
+		};
+	};
+
+	i2c@7000c000 {
+		bm92t: bm92t@18 {
+			status = "okay";
+			interrupts = <TEGRA_GPIO(K, 4) IRQ_TYPE_LEVEL_LOW>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&vali_bm92_irq_default>;
+			/delete-property/ rohm,dp-signal-toggle-on-resume;
+			rohm,dp-disable;
+			rohm,pd-5v-current-limit-ma = <2000>;
+			rohm,pd-9v-current-limit-ma = <1500>;
+			rohm,pd-12v-current-limit-ma = <1200>;
+			rohm,pd-15v-current-limit-ma = <900>;
+		};
+
+		bq2419x: bq24193@6b {
+			battery_charger: charger {
+				ti,charge-voltage-limit-millivolt = <4320>; /* Adjusted by cell age */
+				ti,fast-charge-current-limit-milliamp = <1664>;
+				ti,temp-range = <0 18 47 58>;
+				ti,charge-thermal-voltage-limit = <4320 4320 4320 4080>; /* Adjusted by cell age */
+				ti,charge-current-limit = <512 640 1664 1664>;
+			};
+		};
+
+		fuel_gauge: fuel-gauge@36 {
+			maxim,over-volt = <4320>; /* Actual: 4370 mV */
+			maxim,kernel-maximum-soc = <100>; /* Adjusted by cell age */
+		};
+	};
+
+	i2c@7000d000 {
+		pmic_b: pmic@3c {
+			regulators {
+				/* Vali: Powers LDO 2V8 for Sio VDD
+				 * Powers LDO 1V8 for I2C1 VDDQ and ALC5639.
+				 */
+				ldo8 {
+					regulator-name = "vdd-i2c1";
+					regulator-max-microvolt = <2800000>;
+					regulator-always-on;
+					regulator-boot-on;
+				};
+			};
+		};
+	};
+
+	i2c@546c0000 {
+		bus-pullup-supply = <&battery_reg>;
+	};
+
+	host1x@50000000 {
+		/* tegradc.1: DP */
+		dc@54240000 {
+			status = "disabled";
+		};
+	};
+
+	xusb: usb@70090000 {
+		status = "okay";
+
+		phys = <&{/padctl@7009f000/pads/usb2/lanes/usb2-0}>,
+			<&{/padctl@7009f000/pads/pcie/lanes/pcie-5}>;
+		phy-names = "usb2-0", "usb3-0";
+
+		extcon = <&bm92t 0>;
+		extcon-cable-names = "vbus";
+
+		avdd-usb-supply = <&vdd_3v3>;
+		dvddio-pex-supply = <&max77620_ldo1>;
+		hvddio-pex-supply = <&max77620_sd3>;
+	};
+
+	xudc: usb@700d0000 {
+		status = "okay";
+
+		phys = <&{/padctl@7009f000/pads/usb2/lanes/usb2-0}>,
+			<&{/padctl@7009f000/pads/pcie/lanes/pcie-5}>;
+		phy-names = "usb2-0", "usb3-0";
+
+		extcon = <&bm92t 1>;
+		extcon-cable-names = "id";
+
+		hvdd-usb-supply = <&vdd_3v3>;
+		avddio-usb-supply = <&max77620_ldo1>;
+	};
+
+	pinmux@700008d4 {
+		vali_touch_irq_default: vali-touch-irq-default {
+			touch_int_px1 {
+				nvidia,pins = "touch_int_px1";
+				nvidia,function = "rsvd0";
+				nvidia,pull = <TEGRA_PIN_PULL_UP>;
+				nvidia,tristate = <TEGRA_PIN_ENABLE>;
+				nvidia,enable-input = <TEGRA_PIN_ENABLE>;
+			};
+		};
+
+		vali_bm92_irq_default: vali-bm92-irq-default {
+			pk4 {
+				nvidia,pins = "pk4";
+				nvidia,function = "rsvd1";
+				nvidia,pull = <TEGRA_PIN_PULL_UP>;
+				nvidia,tristate = <TEGRA_PIN_ENABLE>;
+				nvidia,enable-input = <TEGRA_PIN_ENABLE>;
+			};
+		};
+	};
+
+	/* FTM4 touchscreen IRQ is active-low and requires a pull-up. */
+	i2c@7000c500 {
+		touchscreen@49 {
+			pinctrl-names = "default";
+			pinctrl-0 = <&vali_touch_irq_default>;
+		};
+	};
+
+	padctl@7009f000 {
+		status =  "okay";
+
+		avdd-pll-utmip-supply = <&max77620_sd3>;
+		avdd-pll-uerefe-supply = <&max77620_ldo1>;
+		dvdd-pex-pll-supply = <&max77620_ldo1>;
+		hvdd-pex-pll-e-supply = <&max77620_sd3>;
+	};
+};

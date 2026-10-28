@@ -1,0 +1,165 @@
+// SPDX-License-Identifier: GPL-2.0
+#include "tegra210.dtsi"
+
+/ {
+	compatible = "nvidia,tegra210b01", "nvidia,tegra210";
+
+	pcie@1003000 {
+		compatible = "nvidia,tegra210b01-pcie";
+	};
+
+	host1x@50000000 {
+		/delete-node/ sor@54540000;
+		/delete-node/ dpaux@545c0000;
+		/delete-node/ vi@54080000;
+		/delete-node/ i2c@546c0000;
+
+		dc@54200000 {
+			nvidia,outputs = <&dsia &dsib &sor1>;
+		};
+
+		dc@54240000 {
+			nvidia,outputs = <&dsia &dsib &sor1>;
+		};
+
+		dsi@54300000 {
+			compatible = "nvidia,tegra210b01-dsi";
+		};
+
+		dsi@54400000 {
+			compatible = "nvidia,tegra210b01-dsi";
+		};
+	};
+
+	clock@60006000 {
+		compatible = "nvidia,tegra210b01-car";
+	};
+
+	pinmux@700008d4 {
+		status = "okay";
+		sdmmc1_1v8_drv: pinmux-sdmmc1-1v8-drv {
+			sdmmc1 {
+				nvidia,pull-down-strength = <0x8>;
+				nvidia,pull-up-strength = <0x8>;
+			};
+		};
+
+		sdmmc1_3v3_drv: pinmux-sdmmc1-3v3-drv {
+			sdmmc1 {
+				nvidia,pull-down-strength = <0x8>;
+				nvidia,pull-up-strength = <0x8>;
+			};
+		};
+
+		sdmmc3_1v8_drv: pinmux-sdmmc3-1v8-drv {
+			sdmmc3 {
+				nvidia,pull-down-strength = <0x8>;
+				nvidia,pull-up-strength = <0x8>;
+			};
+		};
+
+		sdmmc3_3v3_drv: pinmux-sdmmc3-3v3-drv {
+			sdmmc3 {
+				nvidia,pull-down-strength = <0x8>;
+				nvidia,pull-up-strength = <0x8>;
+			};
+		};
+	};
+
+	i2c@7000d100 {
+		/delete-property/ pinctrl-0;
+		/delete-property/ pinctrl-1;
+		/delete-property/ pinctrl-names;
+	};
+
+	mc: memory-controller@70019000 {
+		emc: external-memory-controller@7001b000 {
+			compatible = "nvidia,tegra210b01-emc";
+			reg = <0x0 0x7001b000 0x0 0x1000>,
+			      <0x0 0x7001e000 0x0 0x1000>,
+			      <0x0 0x7001f000 0x0 0x1000>;
+			clocks = <&bpmp 0>;
+			clock-names = "emc";
+			interrupts = <GIC_SPI 78 IRQ_TYPE_LEVEL_HIGH>;
+
+			#interconnect-cells = <0>;
+			#cooling-cells = <2>;
+
+			nvidia,bpmp = <&bpmp>;
+		};
+	};
+
+	/delete-node/ external-memory-controller@7001b000;
+
+	mmc@700b0000 {
+		nvidia,default-tap = <0xb>;
+		nvidia,default-trim = <0xe>;
+	};
+
+	mmc@700b0200 {
+		nvidia,default-tap = <0x8>;
+		nvidia,default-trim = <0xd>;
+	};
+
+	mmc@700b0400 {
+		nvidia,default-tap = <0xb>;
+		nvidia,default-trim = <0x12>;
+	};
+
+	mmc@700b0600 {
+		nvidia,default-tap = <0x9>;
+		nvidia,default-trim = <0xd>;
+
+		assigned-clocks = <&tegra_car TEGRA210_CLK_SDMMC4>,
+			 <&tegra_car TEGRA210_CLK_PLL_C4_OUT2>;
+		assigned-clock-parents = <&tegra_car TEGRA210_CLK_PLL_C4_OUT2>;
+	};
+
+	/* Tegra210B01 has MBIST patched and is missing VI unit */
+	pmc@7000e400 {
+		compatible = "nvidia,tegra210b01-pmc";
+
+		powergates {
+			/delete-node/ venc;
+		};
+	};
+
+	bpmp: bpmp@70016000 {
+		status = "okay";
+	};
+
+	usb@70090000 {
+		compatible = "nvidia,tegra210b01-xusb";
+	};
+
+	padctl@7009f000 {
+		compatible = "nvidia,tegra210b01-xusb-padctl";
+		/* Mariko PCIe UPHY calibration needs the additional 102 MHz clock. */
+		pads {
+			pcie {
+				clocks = <&tegra_car TEGRA210_CLK_PLL_E>,
+					 <&tegra_car TEGRA210_CLK_PLL_P_UPHY_OUT>;
+				clock-names = "pll", "uphy_mgmt";
+			};
+		};
+	};
+
+	usb@700d0000 {
+		compatible = "nvidia,tegra210b01-xudc";
+	};
+
+	thermal-sensor@700e2000 {
+		compatible = "nvidia,tegra210b01-soctherm";
+
+		throttle-cfgs {
+			heavy {
+				nvidia,cpu-throt-percent = <0>;
+				nvidia,gpu-throt-level = <TEGRA_SOCTHERM_THROT_LEVEL_NONE>;
+			};
+		};
+	};
+
+	clock@70110000 {
+		compatible = "nvidia,tegra210b01-dfll";
+	};
+};

@@ -34,6 +34,10 @@ Run `./scripts/fetch-enigma.sh r20` or `./scripts/fetch-enigma.sh r21` to recons
 
 See [STATUS](docs/STATUS.md), [PCIe findings](docs/PCIE.md), [GPU findings](docs/GPU.md), and [test requirements](docs/TESTING.md).
 
+## Browse the actual modified kernel source files
+
+The **16 full C / header / Device Tree files changed in R20** are also provided under [source-snapshots/r20](source-snapshots/r20). These are reviewed snapshots of the patched files, **not a standalone complete kernel tree**; do not build this directory by itself. The authoritative, reproducible full tree is obtained with `./scripts/fetch-enigma.sh r20`.
+
 ## Participation
 
 Work is split into independent issues / patches. You do **not** need to own the entire project to contribute. Reproduction logs, focused improvements, hardware comparisons, kernel-driver review, and documentation are especially welcome.
