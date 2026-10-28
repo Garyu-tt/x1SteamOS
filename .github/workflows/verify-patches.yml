@@ -1,0 +1,33 @@
+name: Verify Enigma kernel patch stack
+on:
+  push:
+    paths:
+      - "patches/**"
+      - "scripts/**"
+      - "configs/**"
+      - ".github/workflows/verify-patches.yml"
+  pull_request:
+    paths:
+      - "patches/**"
+      - "scripts/**"
+      - "configs/**"
+      - ".github/workflows/verify-patches.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  patches:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check scripts
+        run: bash -n scripts/fetch-enigma.sh
+      - name: Reconstruct R20 Linux 6.18 source
+        run: ./scripts/fetch-enigma.sh r20
+      - name: Ensure R21 patch applies independently on R20
+        run: git -C work/linux-enigma apply --check "$GITHUB_WORKSPACE/patches/experimental/r21-pad-refclk.patch"
+      - name: Check whitespace errors in patch stack
+        run: git -C work/linux-enigma diff --check
