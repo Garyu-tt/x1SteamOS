@@ -1,0 +1,11 @@
+--- a/drivers/pci/controller/pci-tegra.c
++++ b/drivers/pci/controller/pci-tegra.c
+@@ -2835,7 +2835,7 @@
+ 			.rp_ectl_5_r2 = 0x55010000,
+ 			.rp_ectl_6_r2 = 0x00000001,
+ 		},
+-		.enable = true,
++		.enable = false,
+ 	},
+ };
+ 

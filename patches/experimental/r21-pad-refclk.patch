@@ -1,0 +1,11 @@
+--- a/drivers/pci/controller/pci-tegra.c
++++ b/drivers/pci/controller/pci-tegra.c
+@@ -2840,7 +2840,7 @@
+ 	.msi_base_shift = 8,
+ 	.pads_pll_ctl = PADS_PLL_CTL_TEGRA30,
+ 	.tx_ref_sel = PADS_PLL_CTL_TXCLKREF_BUF_EN,
+-	.pads_refclk_cfg0 = 0x90b890b8,
++	.pads_refclk_cfg0 = 0xb0b880b8,
+ 	/* FC threshold is bit[25:18] */
+ 	.update_fc_threshold = 0x01800000,
+ 	.has_pex_clkreq_en = true,

@@ -1,0 +1,20 @@
+--- a/drivers/pci/controller/pci-tegra.c
++++ b/drivers/pci/controller/pci-tegra.c
+@@ -2819,7 +2819,7 @@
+ 	.has_intr_prsnt_sense = true,
+ 	.has_cml_clk = true,
+ 	.has_gen2 = true,
+-	.force_pca_enable = true,
++	.force_pca_enable = false,
+ 	.program_uphy = true,
+ 	.program_deskew_time = true,
+ 	.update_fc_timer = true,
+@@ -2835,7 +2835,7 @@
+ 			.rp_ectl_5_r2 = 0x55010000,
+ 			.rp_ectl_6_r2 = 0x00000001,
+ 		},
+-		.enable = true,
++		.enable = false,
+ 	},
+ };
+ 

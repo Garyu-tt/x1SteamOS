@@ -1,0 +1,20 @@
+--- a/drivers/pci/controller/pci-tegra.c
++++ b/drivers/pci/controller/pci-tegra.c
+@@ -2688,6 +2688,17 @@
+ 			 port->index, port->lanes);
+ 
+ 		tegra_pcie_port_enable(port);
++
++		/* Match L4T: assert endpoint presence before starting LTSSM. */
++		if (pcie->wlan_reg_on) {
++			u32 presence = readl(port->base + RP_PRIV_MISC);
++
++			presence &= ~RP_PRIV_MISC_PRSNT_MAP_EP_ABSNT;
++			presence |= RP_PRIV_MISC_PRSNT_MAP_EP_PRSNT;
++			writel(presence, port->base + RP_PRIV_MISC);
++			dev_info(dev, "x1-r17-presence: before LTSSM port=%u PRSNT=%08x\n",
++				 port->index, readl(port->base + RP_PRIV_MISC));
++		}
+ 	}
+ 
+ 	/* Start LTSSM from Tegra side */

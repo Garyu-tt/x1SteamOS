@@ -1,0 +1,41 @@
+--- a/drivers/pci/controller/pci-tegra.c
++++ b/drivers/pci/controller/pci-tegra.c
+@@ -2545,6 +2545,22 @@
+  * can result in the increase of the bootup time as there are big timeout
+  * loops.
+  */
++/* R20: read-only LTSSM hardware diagnostics from L4T Tegra210. */
++#define X1_R20_RP_LTSSM_DBGREG 0x00000e44
++#define X1_R20_RP_LTSSM_TRACE_CONTROL 0x00000e50
++#define X1_R20_RP_LTSSM_TRACE_STATUS 0x00000e54
++
++static void x1_r20_ltssm_snapshot(struct tegra_pcie_port *port,
++                                  const char *phase)
++{
++    dev_info(port->pcie->dev,
++             "x1-r20-ltssm %s port=%u dbg=%08x trace_ctl=%08x trace_status=%08x\n",
++             phase, port->index,
++             readl(port->base + X1_R20_RP_LTSSM_DBGREG),
++             readl(port->base + X1_R20_RP_LTSSM_TRACE_CONTROL),
++             readl(port->base + X1_R20_RP_LTSSM_TRACE_STATUS));
++}
++
+ #define TEGRA_PCIE_LINKUP_TIMEOUT	200	/* up to 1.2 seconds */
+ static bool tegra_pcie_port_check_link(struct tegra_pcie_port *port)
+ {
+@@ -2556,6 +2572,7 @@
+ 	 * x1-r13-link: snapshot root-port link training *before* the driver
+ 	 * disables and frees the failed port. No additional register writes.
+ 	 */
++	x1_r20_ltssm_snapshot(port, "initial");
+ 	dev_info(dev,
+ 		 "x1-r13-link initial port=%u AFI_PEX_CTRL=%08x AFI_CFG=%08x PLLE=%08x XP=%08x LNK=%08x LNK2=%08x PRSNT=%08x\n",
+ 		 port->index,
+@@ -2602,6 +2619,7 @@
+ 		} while (--timeout);
+ 
+ retry:
++		x1_r20_ltssm_snapshot(port, "retry");
+ 		dev_info(dev,
+ 			 "x1-r13-link retry=%u XP=%08x LNK=%08x LNK2=%08x PEX=%08x\n",
+ 			 4 - retries,

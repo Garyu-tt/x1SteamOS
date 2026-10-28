@@ -1,0 +1,789 @@
+diff --git a/arch/arm64/boot/dts/nvidia/tegra210.dtsi b/arch/arm64/boot/dts/nvidia/tegra210.dtsi
+index 64a5c2736..b2367b199 100644
+--- a/arch/arm64/boot/dts/nvidia/tegra210.dtsi
++++ b/arch/arm64/boot/dts/nvidia/tegra210.dtsi
+@@ -471,8 +471,9 @@ gpu@57000000 {
+ 		interrupt-names = "stall", "nonstall";
+ 		clocks = <&tegra_car TEGRA210_CLK_GPU>,
+ 			 <&tegra_car TEGRA210_CLK_PLL_P_OUT5>,
+-			 <&tegra_car TEGRA210_CLK_PLL_G_REF>;
+-		clock-names = "gpu", "pwr", "ref";
++			 <&tegra_car TEGRA210_CLK_PLL_G_REF>,
++			 <&tegra_car TEGRA210_CLK_FUSE>;
++		clock-names = "gpu", "pwr", "ref", "fuse";
+ 		resets = <&tegra_car 184>;
+ 		reset-names = "gpu";
+ 
+diff --git a/arch/arm64/boot/dts/nvidia/tegra210b01-nx.dtsi b/arch/arm64/boot/dts/nvidia/tegra210b01-nx.dtsi
+index 5ea8d9ae7..30e0d59ea 100644
+--- a/arch/arm64/boot/dts/nvidia/tegra210b01-nx.dtsi
++++ b/arch/arm64/boot/dts/nvidia/tegra210b01-nx.dtsi
+@@ -593,6 +593,8 @@ AO-therm {
+ 
+ 	pcie@1003000 {
+ 		status = "okay";
++		/* R08: GPIO is exclusively owned by PCIe for a real cold cycle. */
++		wlan-reg-on-gpios = <&gpio TEGRA_GPIO(H, 1) GPIO_ACTIVE_HIGH>;
+ 
+ 		avdd-pll-uerefe-supply = <&max77620_ldo1>;
+ 		hvddio-pex-supply = <&max77620_sd3>;
+@@ -611,6 +613,8 @@ pci@1,0 {
+ 
+ 		pci@2,0 {
+ 			status = "okay";
++			/* R10: match the working L4T PCIe CLKREQ# policy. */
++			supports-clkreq;
+ 			phys = <&{/padctl@7009f000/pads/pcie/lanes/pcie-0}>;
+ 			phy-names = "pcie-0";
+ 
+@@ -682,6 +686,7 @@ usb2-0 {
+ 				mode = "otg";
+ 
+ 				usb-role-switch;
++				role-switch-default-mode = "peripheral";
+ 				vbus-supply = <&battery_reg>;
+ 
+ 				#address-cells = <1>;
+@@ -1219,11 +1224,11 @@ max77620_ldo6: ldo6 {
+ 					regulator-ramp-delay = <50000>;
+ 				};
+ 
+-				/* Not used on T210B01 */
++				/* PCIe reference PLL on Mariko. */
+ 				max77620_ldo7: ldo7 {
+ 					regulator-name = "vdd-gen-pll-edp";
+ 					regulator-min-microvolt = <1000000>;
+-					regulator-max-microvolt = <1000000>; /* 3100000 */
++					regulator-max-microvolt = <1000000>;
+ 					maxim,active-fps-source = <MAX77620_FPS_SRC_NONE>;
+ 					maxim,active-fps-power-up-slot = <0>;
+ 					maxim,active-fps-power-down-slot = <0>;
+diff --git a/arch/arm64/boot/dts/nvidia/tegra210b01-vali.dts b/arch/arm64/boot/dts/nvidia/tegra210b01-vali.dts
+index 943491ac4..39f96f421 100644
+--- a/arch/arm64/boot/dts/nvidia/tegra210b01-vali.dts
++++ b/arch/arm64/boot/dts/nvidia/tegra210b01-vali.dts
+@@ -50,7 +50,10 @@ sio {
+ 
+ 	i2c@7000c000 {
+ 		bm92t: bm92t@18 {
+-			status = "disabled";
++			status = "okay";
++			interrupts = <TEGRA_GPIO(K, 4) IRQ_TYPE_LEVEL_LOW>;
++			pinctrl-names = "default";
++			pinctrl-0 = <&vali_bm92_irq_default>;
+ 			/delete-property/ rohm,dp-signal-toggle-on-resume;
+ 			rohm,dp-disable;
+ 			rohm,pd-5v-current-limit-ma = <2000>;
+@@ -131,6 +134,36 @@ xudc: usb@700d0000 {
+ 		avddio-usb-supply = <&max77620_ldo1>;
+ 	};
+ 
++	pinmux@700008d4 {
++		vali_touch_irq_default: vali-touch-irq-default {
++			touch_int_px1 {
++				nvidia,pins = "touch_int_px1";
++				nvidia,function = "rsvd0";
++				nvidia,pull = <TEGRA_PIN_PULL_UP>;
++				nvidia,tristate = <TEGRA_PIN_ENABLE>;
++				nvidia,enable-input = <TEGRA_PIN_ENABLE>;
++			};
++		};
++
++		vali_bm92_irq_default: vali-bm92-irq-default {
++			pk4 {
++				nvidia,pins = "pk4";
++				nvidia,function = "rsvd1";
++				nvidia,pull = <TEGRA_PIN_PULL_UP>;
++				nvidia,tristate = <TEGRA_PIN_ENABLE>;
++				nvidia,enable-input = <TEGRA_PIN_ENABLE>;
++			};
++		};
++	};
++
++	/* FTM4 touchscreen IRQ is active-low and requires a pull-up. */
++	i2c@7000c500 {
++		touchscreen@49 {
++			pinctrl-names = "default";
++			pinctrl-0 = <&vali_touch_irq_default>;
++		};
++	};
++
+ 	padctl@7009f000 {
+ 		status =  "okay";
+ 
+diff --git a/arch/arm64/boot/dts/nvidia/tegra210b01.dtsi b/arch/arm64/boot/dts/nvidia/tegra210b01.dtsi
+index 939a18992..f283a409a 100644
+--- a/arch/arm64/boot/dts/nvidia/tegra210b01.dtsi
++++ b/arch/arm64/boot/dts/nvidia/tegra210b01.dtsi
+@@ -134,6 +134,14 @@ usb@70090000 {
+ 
+ 	padctl@7009f000 {
+ 		compatible = "nvidia,tegra210b01-xusb-padctl";
++		/* Mariko PCIe UPHY calibration needs the additional 102 MHz clock. */
++		pads {
++			pcie {
++				clocks = <&tegra_car TEGRA210_CLK_PLL_E>,
++					 <&tegra_car TEGRA210_CLK_PLL_P_UPHY_OUT>;
++				clock-names = "pll", "uphy_mgmt";
++			};
++		};
+ 	};
+ 
+ 	usb@700d0000 {
+diff --git a/drivers/gpu/drm/nouveau/include/nvkm/core/tegra.h b/drivers/gpu/drm/nouveau/include/nvkm/core/tegra.h
+index 57bc54278..5c91db1ee 100644
+--- a/drivers/gpu/drm/nouveau/include/nvkm/core/tegra.h
++++ b/drivers/gpu/drm/nouveau/include/nvkm/core/tegra.h
+@@ -15,6 +15,7 @@ struct nvkm_device_tegra {
+ 	struct clk *clk;
+ 	struct clk *clk_ref;
+ 	struct clk *clk_pwr;
++	struct clk *clk_fuse;
+ 
+ 	struct regulator *vdd;
+ 
+diff --git a/drivers/gpu/drm/nouveau/nvkm/engine/device/tegra.c b/drivers/gpu/drm/nouveau/nvkm/engine/device/tegra.c
+index 03aa6f09e..4dde6bf52 100644
+--- a/drivers/gpu/drm/nouveau/nvkm/engine/device/tegra.c
++++ b/drivers/gpu/drm/nouveau/nvkm/engine/device/tegra.c
+@@ -32,6 +32,10 @@ nvkm_device_tegra_power_up(struct nvkm_device_tegra *tdev)
+ {
+ 	int ret;
+ 
++	ret = clk_prepare_enable(tdev->clk_fuse);
++	if (ret)
++		return ret;
++
+ 	if (tdev->vdd) {
+ 		ret = regulator_enable(tdev->vdd);
+ 		if (ret)
+@@ -75,26 +79,24 @@ nvkm_device_tegra_power_up(struct nvkm_device_tegra *tdev)
+ 	if (tdev->vdd)
+ 		regulator_disable(tdev->vdd);
+ err_power:
++	clk_disable_unprepare(tdev->clk_fuse);
+ 	return ret;
+ }
+ 
+ static int
+ nvkm_device_tegra_power_down(struct nvkm_device_tegra *tdev)
+ {
+-	int ret;
++	int ret = 0;
+ 
+ 	clk_disable_unprepare(tdev->clk_pwr);
+ 	clk_disable_unprepare(tdev->clk_ref);
+ 	clk_disable_unprepare(tdev->clk);
+ 	udelay(10);
+ 
+-	if (tdev->vdd) {
++	if (tdev->vdd)
+ 		ret = regulator_disable(tdev->vdd);
+-		if (ret)
+-			return ret;
+-	}
+-
+-	return 0;
++	clk_disable_unprepare(tdev->clk_fuse);
++	return ret;
+ }
+ 
+ static void
+@@ -307,6 +309,12 @@ nvkm_device_tegra_new(const struct nvkm_device_tegra_func *func,
+ 		goto free;
+ 	}
+ 
++	tdev->clk_fuse = devm_clk_get_optional(&pdev->dev, "fuse");
++	if (IS_ERR(tdev->clk_fuse)) {
++		ret = PTR_ERR(tdev->clk_fuse);
++		goto free;
++	}
++
+ 	/**
+ 	 * The IOMMU bit defines the upper limit of the GPU-addressable space.
+ 	 */
+diff --git a/drivers/gpu/drm/tegra/dc.c b/drivers/gpu/drm/tegra/dc.c
+index 9eec5b4e6..d52a09d8f 100644
+--- a/drivers/gpu/drm/tegra/dc.c
++++ b/drivers/gpu/drm/tegra/dc.c
+@@ -700,6 +700,24 @@ static const u32 tegra124_primary_formats[] = {
+ 	DRM_FORMAT_BGRX8888,
+ };
+ 
++/*
++ * Tegra210 primary scanout on Nintendo Switch is reliable with opaque
++ * framebuffer formats. Alpha-bearing 32-bit formats can produce corrupted
++ * channel ordering on the primary plane, while overlays retain the full
++ * format list. Keep the primary plane opaque so compositors naturally choose
++ * XRGB/XBGR scanout.
++ */
++static const u32 tegra210_primary_formats[] = {
++	DRM_FORMAT_RGB565,
++	DRM_FORMAT_XRGB1555,
++	DRM_FORMAT_RGBX5551,
++	DRM_FORMAT_XBGR1555,
++	DRM_FORMAT_BGRX5551,
++	DRM_FORMAT_BGR565,
++	DRM_FORMAT_XRGB8888,
++	DRM_FORMAT_XBGR8888,
++};
++
+ static const u64 tegra124_modifiers[] = {
+ 	DRM_FORMAT_MOD_LINEAR,
+ 	DRM_FORMAT_MOD_NVIDIA_16BX2_BLOCK(0),
+@@ -3038,8 +3056,8 @@ static const struct tegra_dc_soc_info tegra210_dc_soc_info = {
+ 	.has_powergate = true,
+ 	.coupled_pm = false,
+ 	.has_nvdisplay = false,
+-	.num_primary_formats = ARRAY_SIZE(tegra114_primary_formats),
+-	.primary_formats = tegra114_primary_formats,
++	.num_primary_formats = ARRAY_SIZE(tegra210_primary_formats),
++	.primary_formats = tegra210_primary_formats,
+ 	.num_overlay_formats = ARRAY_SIZE(tegra114_overlay_formats),
+ 	.overlay_formats = tegra114_overlay_formats,
+ 	.modifiers = tegra124_modifiers,
+diff --git a/drivers/mmc/host/sdhci-tegra.c b/drivers/mmc/host/sdhci-tegra.c
+index 820ce4dae..933491c7b 100644
+--- a/drivers/mmc/host/sdhci-tegra.c
++++ b/drivers/mmc/host/sdhci-tegra.c
+@@ -775,6 +775,13 @@ static void tegra_sdhci_set_clock(struct sdhci_host *host, unsigned int clock)
+ 		dev_err(dev, "failed to set clk rate to %luHz: %d\n",
+ 			host_clk, err);
+ 
++	/* R04 diagnostic: logging only, no change to the clock request. */
++	if (!strcmp(dev_name(dev), "700b0000.mmc"))
++		dev_info(dev,
++			 "x1-r04-sdclock request=%u host=%lu ret=%d effective=%lu ddr=%d\n",
++			 clock, host_clk, err, clk_get_rate(pltfm_host->clk),
++			 tegra_host->ddr_signaling);
++
+ 	tegra_host->curr_clk_rate = clk_get_rate(pltfm_host->clk);
+ 	if (tegra_host->ddr_signaling)
+ 		host->max_clk = host_clk;
+@@ -818,8 +825,13 @@ static void tegra_sdhci_hs400_enhanced_strobe(struct mmc_host *mmc,
+ static unsigned int tegra_sdhci_get_max_clock(struct sdhci_host *host)
+ {
+ 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
++	long rounded = clk_round_rate(pltfm_host->clk, 25000000UL);
+ 
+-	return clk_round_rate(pltfm_host->clk, UINT_MAX);
++	/* R05: conservative, bounded clock test (25MHz max). */
++	dev_info(mmc_dev(host->mmc),
++		 "x1-r05-maxclock round(25M)=%ld now=%lu\n",
++		 rounded, clk_get_rate(pltfm_host->clk));
++	return (rounded >= 1000000L && rounded <= 25000000L) ? rounded : min(clk_get_rate(pltfm_host->clk), 25000000UL);
+ }
+ 
+ static void tegra_sdhci_set_dqs_trim(struct sdhci_host *host, u8 trim)
+diff --git a/drivers/pci/controller/pci-tegra.c b/drivers/pci/controller/pci-tegra.c
+index 46af8785a..671338779 100644
+--- a/drivers/pci/controller/pci-tegra.c
++++ b/drivers/pci/controller/pci-tegra.c
+@@ -427,6 +427,9 @@ struct tegra_pcie {
+ 	struct reset_control *afi_rst;
+ 	struct reset_control *pcie_xrst;
+ 
++	/* x1-r08-wlan: Switch Lite WLAN PCIe endpoint power-on reset. */
++	struct gpio_desc *wlan_reg_on;
++
+ 	bool legacy_phy;
+ 	struct phy *phy;
+ 
+@@ -647,7 +650,11 @@ static void tegra_pcie_port_reset(struct tegra_pcie_port *port)
+ 		afi_writel(port->pcie, value, ctrl);
+ 	}
+ 
+-	usleep_range(1000, 2000);
++	/* BCM4356 refclk must be stable for 10ms before PERST# rises. */
++	if (port->pcie->wlan_reg_on)
++		usleep_range(12000, 14000);
++	else
++		usleep_range(1000, 2000);
+ 
+ 	if (port->reset_gpio) {
+ 		gpiod_set_value(port->reset_gpio, 0);
+@@ -656,6 +663,10 @@ static void tegra_pcie_port_reset(struct tegra_pcie_port *port)
+ 		value |= AFI_PEX_CTRL_RST;
+ 		afi_writel(port->pcie, value, ctrl);
+ 	}
++
++	/* CYW4356 needs at least 6ms before the first config transaction. */
++	if (port->pcie->wlan_reg_on)
++		usleep_range(7000, 8000);
+ }
+ 
+ static void disable_aspm_l0s(struct tegra_pcie_port *port)
+@@ -1403,8 +1414,17 @@ static void tegra_pcie_enable_controller(struct tegra_pcie *pcie)
+ 	struct tegra_pcie_port *port;
+ 	unsigned long value;
+ 
+-	/* enable PLL power down */
+-	if (soc->has_aspm_l1ss) {
++	/*
++	 * R11: Mariko requires AFI PLL_E arbitration too, even though
++	 * this controller lacks the ASPM L1SS feature flag. L4T 4.9
++	 * sets these PLL_E control bits unconditionally for Tegra210B01.
++	 */
++	if (of_device_is_compatible(pcie->dev->of_node, "nvidia,tegra210b01-pcie"))
++		dev_info(pcie->dev, "x1-r11-plle before=0x%08x\n",
++			 afi_readl(pcie, AFI_PLLE_CONTROL));
++
++	/* enable PLL power down also for Mariko UPHY (L1SS not required) */
++	if (soc->has_aspm_l1ss || soc->program_uphy) {
+ 		value = afi_readl(pcie, AFI_PLLE_CONTROL);
+ 		value &= ~AFI_PLLE_CONTROL_BYPASS_PADS2PLLE_CONTROL;
+ 		value |= AFI_PLLE_CONTROL_PADS2PLLE_CONTROL_EN;
+@@ -1419,6 +1439,10 @@ static void tegra_pcie_enable_controller(struct tegra_pcie *pcie)
+ 		value &= ~AFI_PLLE_CONTROL_BYPASS_PCIE2PLLE_CONTROL;
+ 		value |= AFI_PLLE_CONTROL_PCIE2PLLE_CONTROL_EN;
+ 		afi_writel(pcie, value, AFI_PLLE_CONTROL);
++		if (of_device_is_compatible(pcie->dev->of_node,
++					    "nvidia,tegra210b01-pcie"))
++			dev_info(pcie->dev, "x1-r11-plle after=0x%08x\n",
++				 afi_readl(pcie, AFI_PLLE_CONTROL));
+ 	}
+ 
+ 	/* power down PCIe slot clock bias pad */
+@@ -2528,6 +2552,21 @@ static bool tegra_pcie_port_check_link(struct tegra_pcie_port *port)
+ 	unsigned int retries = 3;
+ 	unsigned long value;
+ 
++	/*
++	 * x1-r13-link: snapshot root-port link training *before* the driver
++	 * disables and frees the failed port. No additional register writes.
++	 */
++	dev_info(dev,
++		 "x1-r13-link initial port=%u AFI_PEX_CTRL=%08x AFI_CFG=%08x PLLE=%08x XP=%08x LNK=%08x LNK2=%08x PRSNT=%08x\n",
++		 port->index,
++		 afi_readl(port->pcie, tegra_pcie_port_get_pex_ctrl(port)),
++		 afi_readl(port->pcie, AFI_PCIE_CONFIG),
++		 afi_readl(port->pcie, AFI_PLLE_CONTROL),
++		 readl(port->base + RP_VEND_XP),
++		 readl(port->base + RP_LINK_CONTROL_STATUS),
++		 readl(port->base + RP_LINK_CONTROL_STATUS_2),
++		 readl(port->base + RP_PRIV_MISC));
++
+ 	/* override presence detection */
+ 	value = readl(port->base + RP_PRIV_MISC);
+ 	value &= ~RP_PRIV_MISC_PRSNT_MAP_EP_ABSNT;
+@@ -2563,9 +2602,21 @@ static bool tegra_pcie_port_check_link(struct tegra_pcie_port *port)
+ 		} while (--timeout);
+ 
+ retry:
++		dev_info(dev,
++			 "x1-r13-link retry=%u XP=%08x LNK=%08x LNK2=%08x PEX=%08x\n",
++			 4 - retries,
++			 readl(port->base + RP_VEND_XP),
++			 readl(port->base + RP_LINK_CONTROL_STATUS),
++			 readl(port->base + RP_LINK_CONTROL_STATUS_2),
++			 afi_readl(port->pcie, tegra_pcie_port_get_pex_ctrl(port)));
+ 		tegra_pcie_port_reset(port);
+ 	} while (--retries);
+ 
++	dev_info(dev,
++		 "x1-r13-link terminal port=%u XP=%08x LNK=%08x AFI_CFG=%08x\n",
++		 port->index, readl(port->base + RP_VEND_XP),
++		 readl(port->base + RP_LINK_CONTROL_STATUS),
++		 afi_readl(port->pcie, AFI_PCIE_CONFIG));
+ 	return false;
+ }
+ 
+@@ -2637,6 +2688,17 @@ static void tegra_pcie_enable_ports(struct tegra_pcie *pcie)
+ 			 port->index, port->lanes);
+ 
+ 		tegra_pcie_port_enable(port);
++
++		/* Match L4T: assert endpoint presence before starting LTSSM. */
++		if (pcie->wlan_reg_on) {
++			u32 presence = readl(port->base + RP_PRIV_MISC);
++
++			presence &= ~RP_PRIV_MISC_PRSNT_MAP_EP_ABSNT;
++			presence |= RP_PRIV_MISC_PRSNT_MAP_EP_PRSNT;
++			writel(presence, port->base + RP_PRIV_MISC);
++			dev_info(dev, "x1-r17-presence: before LTSSM port=%u PRSNT=%08x\n",
++				 port->index, readl(port->base + RP_PRIV_MISC));
++		}
+ 	}
+ 
+ 	/* Start LTSSM from Tegra side */
+@@ -2784,7 +2846,7 @@ static const struct tegra_pcie_soc tegra210b01_pcie = {
+ 			.rp_ectl_5_r2 = 0x55010000,
+ 			.rp_ectl_6_r2 = 0x00000001,
+ 		},
+-		.enable = true,
++		.enable = false,
+ 	},
+ };
+ 
+@@ -2976,6 +3038,13 @@ static int tegra_pcie_probe(struct platform_device *pdev)
+ 	if (err < 0)
+ 		return err;
+ 
++	/* Optional board-specific WLAN rail; other Tegra boards are untouched. */
++	pcie->wlan_reg_on = devm_gpiod_get_optional(dev, "wlan-reg-on",
++						      GPIOD_OUT_LOW);
++	if (IS_ERR(pcie->wlan_reg_on))
++		return dev_err_probe(dev, PTR_ERR(pcie->wlan_reg_on),
++				     "x1-r08-wlan: cannot claim WL_REG_ON\n");
++
+ 	err = tegra_pcie_get_resources(pcie);
+ 	if (err < 0) {
+ 		dev_err(dev, "failed to request resources: %d\n", err);
+@@ -3095,12 +3164,6 @@ static int tegra_pcie_pm_resume(struct device *dev)
+ 		goto poweroff;
+ 	}
+ 
+-	tegra_pcie_enable_controller(pcie);
+-	tegra_pcie_setup_translations(pcie);
+-
+-	if (IS_ENABLED(CONFIG_PCI_MSI))
+-		tegra_pcie_enable_msi(pcie);
+-
+ 	err = clk_prepare_enable(pcie->pex_clk);
+ 	if (err) {
+ 		dev_err(dev, "failed to enable PEX clock: %d\n", err);
+@@ -3117,7 +3180,30 @@ static int tegra_pcie_pm_resume(struct device *dev)
+ 		}
+ 	}
+ 
++	/*
++	 * x1-r12-order: L4T 4.9 powers the Mariko UPHY first and then
++	 * configures AFI controller and mappings. Tegra6.18 did inverse.
++	 * Keep all other board settings intact for a single-variable test.
++	 */
++	if (of_device_is_compatible(pcie->dev->of_node,
++				    "nvidia,tegra210b01-pcie"))
++		dev_info(pcie->dev, "x1-r12-order: PHY ready, enabling AFI now\n");
++	tegra_pcie_enable_controller(pcie);
++	tegra_pcie_setup_translations(pcie);
++
++	if (IS_ENABLED(CONFIG_PCI_MSI))
++		tegra_pcie_enable_msi(pcie);
++
+ 	tegra_pcie_apply_pad_settings(pcie);
++
++	/* Switch Lite: cold cycle WL_REG_ON after rails/UPHY become ready. */
++	if (pcie->wlan_reg_on) {
++		gpiod_set_value_cansleep(pcie->wlan_reg_on, 0);
++		msleep(30);
++		gpiod_set_value_cansleep(pcie->wlan_reg_on, 1);
++		dev_info(pcie->dev, "x1-r08-wlan: WL_REG_ON asserted, waiting for POR\n");
++		msleep(130);
++	}
+ 	tegra_pcie_enable_ports(pcie);
+ 
+ 	return 0;
+diff --git a/drivers/phy/tegra/xusb-tegra210.c b/drivers/phy/tegra/xusb-tegra210.c
+index 079174dbc..751beec9e 100644
+--- a/drivers/phy/tegra/xusb-tegra210.c
++++ b/drivers/phy/tegra/xusb-tegra210.c
+@@ -230,7 +230,7 @@
+ #define XUSB_PADCTL_UPHY_MISC_PAD_CTL2_RX_SLEEP_VAL GENMASK(13, 12)
+ #define XUSB_PADCTL_UPHY_MISC_PAD_CTL2_RX_PWR_OVRD BIT(25)
+ 
+-#define XUSB_PADCTL_UPHY_MISC_PAD_PX_CTL8(x) (0x460 + (x) * (0x1c))
++#define XUSB_PADCTL_UPHY_MISC_PAD_PX_CTL8(x) (0x47c + (x) * 0x40)
+ #define CFG_ADDR(x) (((x) & 0xff) << 16)
+ #define CFG_WDATA(x) (((x) & 0xffff) << 0)
+ #define CFG_RESET (1 << 27)
+@@ -246,7 +246,7 @@
+ 
+ #define XUSB_PADCTL_UPHY_PLL_S0_CTL8 0x87c
+ 
+-#define XUSB_PADCTL_UPHY_PLL_S0_CTL10 0x384
++#define XUSB_PADCTL_UPHY_PLL_P0_CTL10 0x384
+ 
+ #define XUSB_PADCTL_UPHY_MISC_PAD_S0_CTL1 0x960
+ #define XUSB_PADCTL_UPHY_MISC_PAD_S0_CTL2 0x964
+@@ -427,6 +427,11 @@ static struct init_data usb3_pll_g1_init_data[] = {
+ 	{.cfg_addr = 0x1E, .cfg_wdata = 0x0017},
+ };
+ 
++/* x1-r09: confirmed verbatim against booting L4T 4.9.140-l4t. */
++static const struct init_data mariko_pcie_lane_defaults[] = {
++	{ .cfg_addr = 0x97, .cfg_wdata = 0x0080 },
++};
++
+ struct tegra210_xusb_fuse_calibration {
+ 	u32 hs_curr_level[4];
+ 	u32 hs_term_range_adj;
+@@ -555,6 +560,10 @@ static int tegra210_pex_uphy_enable(struct tegra_xusb_padctl *padctl)
+ 			return err;
+ 	}
+ 
++	/* x1-r09: trace the Mariko PLL branch before any early exit. */
++	dev_info(padctl->dev, "x1-r09-uphy: b01=%d hwseq=%d\n",
++		 t210b01_compatible(padctl),
++		 plle_hw_sequence_is_enabled(padctl));
+ 	if (plle_hw_sequence_is_enabled(padctl))
+ 		goto skip_pll_init;
+ 
+@@ -563,30 +572,51 @@ static int tegra210_pex_uphy_enable(struct tegra_xusb_padctl *padctl)
+ 		goto disable;
+ 
+ 	if (t210b01_compatible(padctl) == 1) {
++		/* L4T 4.9 Mariko path: tune active PCIe lanes before PLL calibration. */
++		for (i = 0; i < padctl->pcie->soc->num_lanes; i++) {
++			struct tegra_xusb_lane *lane;
++			unsigned int j;
++
++			if (!padctl->pcie->lanes[i])
++				continue;
++			lane = phy_get_drvdata(padctl->pcie->lanes[i]);
++			if (!tegra_xusb_lane_check(lane, "pcie-x1") &&
++			    !tegra_xusb_lane_check(lane, "pcie-x4"))
++				continue;
++			for (j = 0; j < ARRAY_SIZE(mariko_pcie_lane_defaults); j++) {
++				value = CFG_ADDR(mariko_pcie_lane_defaults[j].cfg_addr) |
++					CFG_WDATA(mariko_pcie_lane_defaults[j].cfg_wdata) |
++					CFG_RESET | CFG_WS;
++				padctl_writel(padctl, value,
++					     XUSB_PADCTL_UPHY_MISC_PAD_PX_CTL8(lane->index));
++			}
++			dev_info(padctl->dev, "x1-r09-uphy: tuned pcie lane %u\n",
++				 lane->index);
++		}
++		/* B01-specific indirect PLL table; do not overwrite with T210 fields. */
+ 		for (i = 0; i < ARRAY_SIZE(usb3_pll_g1_init_data); i++) {
+-			value = 0;
+-			value |= CFG_ADDR(usb3_pll_g1_init_data[i].cfg_addr);
+-			value |= CFG_WDATA(usb3_pll_g1_init_data[i].cfg_wdata);
+-			value |= CFG_RESET;
+-			value |= CFG_WS;
+-			padctl_writel(padctl, value,
+-					XUSB_PADCTL_UPHY_PLL_S0_CTL10);
++			value = CFG_ADDR(usb3_pll_g1_init_data[i].cfg_addr) |
++				CFG_WDATA(usb3_pll_g1_init_data[i].cfg_wdata) |
++				CFG_RESET | CFG_WS;
++			padctl_writel(padctl, value, XUSB_PADCTL_UPHY_PLL_P0_CTL10);
+ 		}
+-	}
+-
+-	value = padctl_readl(padctl, XUSB_PADCTL_UPHY_PLL_P0_CTL2);
+-	value &= ~(XUSB_PADCTL_UPHY_PLL_CTL2_CAL_CTRL_MASK <<
+-		   XUSB_PADCTL_UPHY_PLL_CTL2_CAL_CTRL_SHIFT);
+-	value |= XUSB_PADCTL_UPHY_PLL_CTL2_CAL_CTRL_VAL <<
+-		 XUSB_PADCTL_UPHY_PLL_CTL2_CAL_CTRL_SHIFT;
+-	padctl_writel(padctl, value, XUSB_PADCTL_UPHY_PLL_P0_CTL2);
++		dev_info(padctl->dev, "x1-r09-uphy: applied Mariko G1 PLL table\n");
++	} else {
++		/* Erista/T210 exclusively uses the direct CAL_CTRL and DCO_CTRL. */
++		value = padctl_readl(padctl, XUSB_PADCTL_UPHY_PLL_P0_CTL2);
++		value &= ~(XUSB_PADCTL_UPHY_PLL_CTL2_CAL_CTRL_MASK <<
++			   XUSB_PADCTL_UPHY_PLL_CTL2_CAL_CTRL_SHIFT);
++		value |= XUSB_PADCTL_UPHY_PLL_CTL2_CAL_CTRL_VAL <<
++			 XUSB_PADCTL_UPHY_PLL_CTL2_CAL_CTRL_SHIFT;
++		padctl_writel(padctl, value, XUSB_PADCTL_UPHY_PLL_P0_CTL2);
+ 
+-	value = padctl_readl(padctl, XUSB_PADCTL_UPHY_PLL_P0_CTL5);
+-	value &= ~(XUSB_PADCTL_UPHY_PLL_CTL5_DCO_CTRL_MASK <<
+-		   XUSB_PADCTL_UPHY_PLL_CTL5_DCO_CTRL_SHIFT);
+-	value |= XUSB_PADCTL_UPHY_PLL_CTL5_DCO_CTRL_VAL <<
+-		 XUSB_PADCTL_UPHY_PLL_CTL5_DCO_CTRL_SHIFT;
+-	padctl_writel(padctl, value, XUSB_PADCTL_UPHY_PLL_P0_CTL5);
++		value = padctl_readl(padctl, XUSB_PADCTL_UPHY_PLL_P0_CTL5);
++		value &= ~(XUSB_PADCTL_UPHY_PLL_CTL5_DCO_CTRL_MASK <<
++			   XUSB_PADCTL_UPHY_PLL_CTL5_DCO_CTRL_SHIFT);
++		value |= XUSB_PADCTL_UPHY_PLL_CTL5_DCO_CTRL_VAL <<
++			 XUSB_PADCTL_UPHY_PLL_CTL5_DCO_CTRL_SHIFT;
++		padctl_writel(padctl, value, XUSB_PADCTL_UPHY_PLL_P0_CTL5);
++	}
+ 
+ 	value = padctl_readl(padctl, XUSB_PADCTL_UPHY_PLL_P0_CTL1);
+ 	value |= XUSB_PADCTL_UPHY_PLL_CTL1_PWR_OVRD;
+@@ -635,6 +665,7 @@ static int tegra210_pex_uphy_enable(struct tegra_xusb_padctl *padctl)
+ 	padctl_writel(padctl, value, XUSB_PADCTL_UPHY_PLL_P0_CTL4);
+ 
+ 	value = padctl_readl(padctl, XUSB_PADCTL_UPHY_PLL_P0_CTL2);
++	dev_info(padctl->dev, "x1-r09-uphy: CAL_CTL2_pre=0x%08x\n", value);
+ 	value |= XUSB_PADCTL_UPHY_PLL_CTL2_CAL_EN;
+ 	padctl_writel(padctl, value, XUSB_PADCTL_UPHY_PLL_P0_CTL2);
+ 
+@@ -649,10 +680,12 @@ static int tegra210_pex_uphy_enable(struct tegra_xusb_padctl *padctl)
+ 	}
+ 
+ 	if (time_after_eq(jiffies, timeout)) {
++		dev_err(padctl->dev, "x1-r09-uphy: CAL_DONE timeout, CTL2=0x%08x\n", value);
+ 		err = -ETIMEDOUT;
+ 		goto reset;
+ 	}
+ 
++	dev_info(padctl->dev, "x1-r09-uphy: CAL_DONE CTL2=0x%08x\n", value);
+ 	value = padctl_readl(padctl, XUSB_PADCTL_UPHY_PLL_P0_CTL2);
+ 	value &= ~XUSB_PADCTL_UPHY_PLL_CTL2_CAL_EN;
+ 	padctl_writel(padctl, value, XUSB_PADCTL_UPHY_PLL_P0_CTL2);
+@@ -2031,12 +2064,14 @@ static int tegra210_usb2_phy_set_mode(struct phy *phy, enum phy_mode mode,
+ 			 * USB_ROLE_NONE from USB_ROLE_DEVICE, regulator is not
+ 			 * be enabled.
+ 			 */
+-			if (regulator_is_enabled(port->supply))
++			if (port->role == USB_ROLE_HOST)
+ 				regulator_disable(port->supply);
+ 
+ 			tegra210_xusb_padctl_id_override(padctl, false);
+ 			tegra210_xusb_padctl_vbus_override(padctl, false);
+ 		}
++
++		port->role = submode;
+ 	}
+ 
+ 	mutex_unlock(&padctl->lock);
+diff --git a/drivers/phy/tegra/xusb.c b/drivers/phy/tegra/xusb.c
+index 4972507cd..0cc1cc194 100644
+--- a/drivers/phy/tegra/xusb.c
++++ b/drivers/phy/tegra/xusb.c
+@@ -621,6 +621,8 @@ static void tegra_xusb_usb_phy_work(struct work_struct *work)
+ 						    usb_phy_work);
+ 	enum usb_role role = usb_role_switch_get_role(port->usb_role_sw);
+ 
++	dev_info(&port->dev, "NXROLE: role=%s event=%d\n",
++		 usb_roles[role], to_usb_phy_event(role));
+ 	usb_phy_set_event(&port->usb_phy, to_usb_phy_event(role));
+ 
+ 	dev_dbg(&port->dev, "%s(): calling notifier for role %s\n", __func__,
+@@ -750,6 +752,32 @@ static void tegra_xusb_parse_usb_role_default_mode(struct tegra_xusb_port *port)
+ 	}
+ }
+ 
++/*
++ * Wait for the previous controller to yield the USB2 PHY before a new role
++ * takes ownership. Based on the Tegra role-switching v2 fix series.
++ */
++bool tegra_xusb_usb2_port_wait_role_none(struct tegra_xusb_padctl *padctl, int index)
++{
++	struct tegra_xusb_usb2_port *usb2 = tegra_xusb_find_usb2_port(padctl, index);
++	int retries = 5;
++
++	if (!usb2) {
++		dev_err(padctl->dev, "no port found for USB2 lane %u\n", index);
++		return false;
++	}
++
++	do {
++		if (usb2->role == USB_ROLE_NONE)
++			return true;
++
++		usleep_range(50, 60);
++	} while (retries--);
++
++	dev_err(&usb2->base.dev, "timed out waiting for USB_ROLE_NONE\n");
++	return false;
++}
++EXPORT_SYMBOL_GPL(tegra_xusb_usb2_port_wait_role_none);
++
+ static int tegra_xusb_usb2_port_parse_dt(struct tegra_xusb_usb2_port *usb2)
+ {
+ 	struct tegra_xusb_port *port = &usb2->base;
+diff --git a/drivers/phy/tegra/xusb.h b/drivers/phy/tegra/xusb.h
+index 296607d05..e1e758765 100644
+--- a/drivers/phy/tegra/xusb.h
++++ b/drivers/phy/tegra/xusb.h
+@@ -318,6 +318,7 @@ struct tegra_xusb_usb2_port {
+ 	enum usb_dr_mode mode;
+ 	bool internal;
+ 	int usb3_port_fake;
++	enum usb_role role;
+ };
+ 
+ static inline struct tegra_xusb_usb2_port *
+diff --git a/drivers/usb/gadget/udc/tegra-xudc.c b/drivers/usb/gadget/udc/tegra-xudc.c
+index faecb4aba..832df9016 100644
+--- a/drivers/usb/gadget/udc/tegra-xudc.c
++++ b/drivers/usb/gadget/udc/tegra-xudc.c
+@@ -698,8 +698,13 @@ static void tegra_xudc_restore_port_speed(struct tegra_xudc *xudc)
+ 
+ static void tegra_xudc_device_mode_on(struct tegra_xudc *xudc)
+ {
++	int port = tegra_xusb_padctl_get_port_number(xudc->curr_utmi_phy);
+ 	int err;
+ 
++	if (!tegra_xusb_usb2_port_wait_role_none(xudc->padctl, port))
++		return;
++
++	dev_info(xudc->dev, "NXROLE: device_mode_on port=%d\n", port);
+ 	pm_runtime_get_sync(xudc->dev);
+ 
+ 	tegra_phy_xusb_utmi_pad_power_on(xudc->curr_utmi_phy);
+@@ -815,6 +820,8 @@ static void tegra_xudc_update_data_role(struct tegra_xudc *xudc,
+ 	xudc->device_mode = usbphy->last_event == USB_EVENT_VBUS;
+ 
+ 	phy_index = tegra_xudc_get_phy_index(xudc, usbphy);
++	dev_info(xudc->dev, "NXROLE: event=%d device_mode=%d phy_index=%d\n",
++		 usbphy->last_event, xudc->device_mode, phy_index);
+ 	dev_dbg(xudc->dev, "%s(): current phy index is %d\n", __func__,
+ 		phy_index);
+ 
+@@ -833,7 +840,8 @@ static int tegra_xudc_vbus_notify(struct notifier_block *nb,
+ 					       vbus_nb);
+ 	struct usb_phy *usbphy = (struct usb_phy *)data;
+ 
+-	dev_dbg(xudc->dev, "%s(): event is %d\n", __func__, usbphy->last_event);
++	dev_info(xudc->dev, "NXROLE: vbus notifier event=%d\n",
++		 usbphy->last_event);
+ 
+ 	tegra_xudc_update_data_role(xudc, usbphy);
+ 
+diff --git a/drivers/usb/host/xhci-tegra.c b/drivers/usb/host/xhci-tegra.c
+index 628b160a4..472fed1bf 100644
+--- a/drivers/usb/host/xhci-tegra.c
++++ b/drivers/usb/host/xhci-tegra.c
+@@ -1352,19 +1352,21 @@ static void tegra_xhci_id_work(struct work_struct *work)
+ 	struct tegra_xusb_mbox_msg msg;
+ 	struct phy *phy = tegra_xusb_get_phy(tegra, "usb2",
+ 						    tegra->otg_usb2_port);
++	enum usb_role role = USB_ROLE_NONE;
+ 	u32 status;
+ 	int ret;
+ 
+ 	dev_dbg(tegra->dev, "host mode %s\n", str_on_off(tegra->host_mode));
+ 
+-	mutex_lock(&tegra->lock);
++	if (tegra->host_mode) {
++		if (!tegra_xusb_usb2_port_wait_role_none(tegra->padctl,
++						 tegra->otg_usb2_port))
++			return;
+ 
+-	if (tegra->host_mode)
+-		phy_set_mode_ext(phy, PHY_MODE_USB_OTG, USB_ROLE_HOST);
+-	else
+-		phy_set_mode_ext(phy, PHY_MODE_USB_OTG, USB_ROLE_NONE);
++		role = USB_ROLE_HOST;
++	}
+ 
+-	mutex_unlock(&tegra->lock);
++	phy_set_mode_ext(phy, PHY_MODE_USB_OTG, role);
+ 
+ 	tegra->otg_usb3_port = tegra_xusb_padctl_get_usb3_companion(tegra->padctl,
+ 								    tegra->otg_usb2_port);
+diff --git a/drivers/usb/typec/bm92txx.c b/drivers/usb/typec/bm92txx.c
+index d2ef981b7..7a5a1d76d 100644
+--- a/drivers/usb/typec/bm92txx.c
++++ b/drivers/usb/typec/bm92txx.c
+@@ -1040,7 +1040,7 @@ static int bm92t_get_resources(struct bm92t_pd *bm)
+ 		bm->vbus_src = NULL;
+ 	}
+ 
+-	bm->chg_reg = devm_regulator_get_optional(dev, "pd-bat-chg");
++	bm->chg_reg = devm_regulator_get_optional(dev, "pd_bat_chg");
+ 	if (IS_ERR(bm->chg_reg)) {
+ 		if (PTR_ERR(bm->chg_reg) != -ENODEV)
+ 			return dev_err_probe(dev, PTR_ERR(bm->chg_reg),
+@@ -1186,6 +1186,7 @@ static void bm92t_remove(struct i2c_client *client)
+ }
+ 
+ static const struct of_device_id bm92t_of_match[] = {
++	{ .compatible = "rohm,bm92t" },
+ 	{ .compatible = "rohm,bm92t36" },
+ 	{ .compatible = "rohm,bm92t40" },
+ 	{ }
+diff --git a/include/linux/phy/tegra/xusb.h b/include/linux/phy/tegra/xusb.h
+index 6ca51e008..a0d3d5b7c 100644
+--- a/include/linux/phy/tegra/xusb.h
++++ b/include/linux/phy/tegra/xusb.h
+@@ -33,5 +33,6 @@ int tegra_xusb_padctl_disable_phy_sleepwalk(struct tegra_xusb_padctl *padctl, st
+ int tegra_xusb_padctl_enable_phy_wake(struct tegra_xusb_padctl *padctl, struct phy *phy);
+ int tegra_xusb_padctl_disable_phy_wake(struct tegra_xusb_padctl *padctl, struct phy *phy);
+ bool tegra_xusb_padctl_remote_wake_detected(struct tegra_xusb_padctl *padctl, struct phy *phy);
++bool tegra_xusb_usb2_port_wait_role_none(struct tegra_xusb_padctl *padctl, int index);
+ 
+ #endif /* PHY_TEGRA_XUSB_H */

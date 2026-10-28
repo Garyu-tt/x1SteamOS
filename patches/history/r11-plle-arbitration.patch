@@ -1,0 +1,33 @@
+--- a/drivers/pci/controller/pci-tegra.c
++++ b/drivers/pci/controller/pci-tegra.c
+@@ -1414,8 +1414,17 @@
+ 	struct tegra_pcie_port *port;
+ 	unsigned long value;
+ 
+-	/* enable PLL power down */
+-	if (soc->has_aspm_l1ss) {
++	/*
++	 * R11: Mariko requires AFI PLL_E arbitration too, even though
++	 * this controller lacks the ASPM L1SS feature flag. L4T 4.9
++	 * sets these PLL_E control bits unconditionally for Tegra210B01.
++	 */
++	if (of_device_is_compatible(pcie->dev->of_node, "nvidia,tegra210b01-pcie"))
++		dev_info(pcie->dev, "x1-r11-plle before=0x%08x\n",
++			 afi_readl(pcie, AFI_PLLE_CONTROL));
++
++	/* enable PLL power down also for Mariko UPHY (L1SS not required) */
++	if (soc->has_aspm_l1ss || soc->program_uphy) {
+ 		value = afi_readl(pcie, AFI_PLLE_CONTROL);
+ 		value &= ~AFI_PLLE_CONTROL_BYPASS_PADS2PLLE_CONTROL;
+ 		value |= AFI_PLLE_CONTROL_PADS2PLLE_CONTROL_EN;
+@@ -1430,6 +1439,10 @@
+ 		value &= ~AFI_PLLE_CONTROL_BYPASS_PCIE2PLLE_CONTROL;
+ 		value |= AFI_PLLE_CONTROL_PCIE2PLLE_CONTROL_EN;
+ 		afi_writel(pcie, value, AFI_PLLE_CONTROL);
++		if (of_device_is_compatible(pcie->dev->of_node,
++					    "nvidia,tegra210b01-pcie"))
++			dev_info(pcie->dev, "x1-r11-plle after=0x%08x\n",
++				 afi_readl(pcie, AFI_PLLE_CONTROL));
+ 	}
+ 
+ 	/* power down PCIe slot clock bias pad */

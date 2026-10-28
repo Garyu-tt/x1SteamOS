@@ -1,0 +1,46 @@
+--- a/drivers/pci/controller/pci-tegra.c
++++ b/drivers/pci/controller/pci-tegra.c
+@@ -2552,6 +2552,21 @@
+ 	unsigned int retries = 3;
+ 	unsigned long value;
+ 
++	/*
++	 * x1-r13-link: snapshot root-port link training *before* the driver
++	 * disables and frees the failed port. No additional register writes.
++	 */
++	dev_info(dev,
++		 "x1-r13-link initial port=%u AFI_PEX_CTRL=%08x AFI_CFG=%08x PLLE=%08x XP=%08x LNK=%08x LNK2=%08x PRSNT=%08x\n",
++		 port->index,
++		 afi_readl(port->pcie, tegra_pcie_port_get_pex_ctrl(port)),
++		 afi_readl(port->pcie, AFI_PCIE_CONFIG),
++		 afi_readl(port->pcie, AFI_PLLE_CONTROL),
++		 readl(port->base + RP_VEND_XP),
++		 readl(port->base + RP_LINK_CONTROL_STATUS),
++		 readl(port->base + RP_LINK_CONTROL_STATUS_2),
++		 readl(port->base + RP_PRIV_MISC));
++
+ 	/* override presence detection */
+ 	value = readl(port->base + RP_PRIV_MISC);
+ 	value &= ~RP_PRIV_MISC_PRSNT_MAP_EP_ABSNT;
+@@ -2587,9 +2602,21 @@
+ 		} while (--timeout);
+ 
+ retry:
++		dev_info(dev,
++			 "x1-r13-link retry=%u XP=%08x LNK=%08x LNK2=%08x PEX=%08x\n",
++			 4 - retries,
++			 readl(port->base + RP_VEND_XP),
++			 readl(port->base + RP_LINK_CONTROL_STATUS),
++			 readl(port->base + RP_LINK_CONTROL_STATUS_2),
++			 afi_readl(port->pcie, tegra_pcie_port_get_pex_ctrl(port)));
+ 		tegra_pcie_port_reset(port);
+ 	} while (--retries);
+ 
++	dev_info(dev,
++		 "x1-r13-link terminal port=%u XP=%08x LNK=%08x AFI_CFG=%08x\n",
++		 port->index, readl(port->base + RP_VEND_XP),
++		 readl(port->base + RP_LINK_CONTROL_STATUS),
++		 afi_readl(port->pcie, AFI_PCIE_CONFIG));
+ 	return false;
+ }
+ 

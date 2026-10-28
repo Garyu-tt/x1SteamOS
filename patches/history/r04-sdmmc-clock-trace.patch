@@ -1,0 +1,32 @@
+--- a/drivers/mmc/host/sdhci-tegra.c
++++ b/drivers/mmc/host/sdhci-tegra.c
+@@ -775,6 +775,13 @@
+ 		dev_err(dev, "failed to set clk rate to %luHz: %d\n",
+ 			host_clk, err);
+ 
++	/* R04 diagnostic: logging only, no change to the clock request. */
++	if (!strcmp(dev_name(dev), "mmc0"))
++		dev_info(dev,
++			 "x1-r04-sdclock request=%u host=%lu ret=%d effective=%lu ddr=%d\n",
++			 clock, host_clk, err, clk_get_rate(pltfm_host->clk),
++			 tegra_host->ddr_signaling);
++
+ 	tegra_host->curr_clk_rate = clk_get_rate(pltfm_host->clk);
+ 	if (tegra_host->ddr_signaling)
+ 		host->max_clk = host_clk;
+@@ -818,8 +825,13 @@
+ static unsigned int tegra_sdhci_get_max_clock(struct sdhci_host *host)
+ {
+ 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+-
+-	return clk_round_rate(pltfm_host->clk, UINT_MAX);
++	long rounded = clk_round_rate(pltfm_host->clk, UINT_MAX);
++
++	/* R04 diagnostic: capture max-clock calculation without modifying it. */
++	dev_info(mmc_dev(host->mmc),
++		 "x1-r04-maxclock round(UINT_MAX)=%ld now=%lu\n",
++		 rounded, clk_get_rate(pltfm_host->clk));
++	return rounded;
+ }
+ 
+ static void tegra_sdhci_set_dqs_trim(struct sdhci_host *host, u8 trim)

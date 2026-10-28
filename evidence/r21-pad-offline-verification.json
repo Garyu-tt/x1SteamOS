@@ -1,0 +1,14 @@
+{
+  "status": "R21_PAD_OFFLINE_PACKAGE_NOT_INSTALLED",
+  "base": "R20 LTSSM read-only diagnostics",
+  "change": "Tegra210b01 PADS_REFCLK_CFG0 0x90b890b8 -> 0xb0b880b8",
+  "kernel_commit": "80f1e68e163ac77d688f0244b03cf05f791b4781",
+  "Image_sha256": "89d337ccbc539ac0c0d1af5ee31d2c393cca197c798f8318fb08a63852582293",
+  "uImage_sha256": "285dabe81fc7c902ada1ec42e85256c2d05c3c8575df4392d5e8ce54c7cb68b4",
+  "DTIMG_sha256": "f67ade50d93924814af9e06bc1bb163dedc322f0615c2fc90836941dda971066",
+  "DTB_source_sha256": "87cf1162bf002b472ddd8c5f2f85a607e2e7a384fa5b92aa89fb05ad8b45a3e9",
+  "R21_PATCH_sha256": "0fa0717a9e1a250b1773967f24409669bc6f3fb7d49ac7c1465d2ae46476480b",
+  "hardware_test_passed": false,
+  "switch_modified": false,
+  "manual_boot_recovery_required": true
+}

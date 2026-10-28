@@ -1,0 +1,36 @@
+--- a/drivers/pci/controller/pci-tegra.c
++++ b/drivers/pci/controller/pci-tegra.c
+@@ -3126,12 +3126,6 @@
+ 		goto poweroff;
+ 	}
+ 
+-	tegra_pcie_enable_controller(pcie);
+-	tegra_pcie_setup_translations(pcie);
+-
+-	if (IS_ENABLED(CONFIG_PCI_MSI))
+-		tegra_pcie_enable_msi(pcie);
+-
+ 	err = clk_prepare_enable(pcie->pex_clk);
+ 	if (err) {
+ 		dev_err(dev, "failed to enable PEX clock: %d\n", err);
+@@ -3147,6 +3141,20 @@
+ 			goto disable_pex_clk;
+ 		}
+ 	}
++
++	/*
++	 * x1-r12-order: L4T 4.9 powers the Mariko UPHY first and then
++	 * configures AFI controller and mappings. Tegra6.18 did inverse.
++	 * Keep all other board settings intact for a single-variable test.
++	 */
++	if (of_device_is_compatible(pcie->dev->of_node,
++				    "nvidia,tegra210b01-pcie"))
++		dev_info(pcie->dev, "x1-r12-order: PHY ready, enabling AFI now\n");
++	tegra_pcie_enable_controller(pcie);
++	tegra_pcie_setup_translations(pcie);
++
++	if (IS_ENABLED(CONFIG_PCI_MSI))
++		tegra_pcie_enable_msi(pcie);
+ 
+ 	tegra_pcie_apply_pad_settings(pcie);
+ 

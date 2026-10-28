@@ -1,0 +1,138 @@
+--- a/drivers/phy/tegra/xusb-tegra210.c
++++ b/drivers/phy/tegra/xusb-tegra210.c
+@@ -230,7 +230,7 @@
+ #define XUSB_PADCTL_UPHY_MISC_PAD_CTL2_RX_SLEEP_VAL GENMASK(13, 12)
+ #define XUSB_PADCTL_UPHY_MISC_PAD_CTL2_RX_PWR_OVRD BIT(25)
+ 
+-#define XUSB_PADCTL_UPHY_MISC_PAD_PX_CTL8(x) (0x460 + (x) * (0x1c))
++#define XUSB_PADCTL_UPHY_MISC_PAD_PX_CTL8(x) (0x47c + (x) * 0x40)
+ #define CFG_ADDR(x) (((x) & 0xff) << 16)
+ #define CFG_WDATA(x) (((x) & 0xffff) << 0)
+ #define CFG_RESET (1 << 27)
+@@ -246,7 +246,7 @@
+ 
+ #define XUSB_PADCTL_UPHY_PLL_S0_CTL8 0x87c
+ 
+-#define XUSB_PADCTL_UPHY_PLL_S0_CTL10 0x384
++#define XUSB_PADCTL_UPHY_PLL_P0_CTL10 0x384
+ 
+ #define XUSB_PADCTL_UPHY_MISC_PAD_S0_CTL1 0x960
+ #define XUSB_PADCTL_UPHY_MISC_PAD_S0_CTL2 0x964
+@@ -427,6 +427,11 @@
+ 	{.cfg_addr = 0x1E, .cfg_wdata = 0x0017},
+ };
+ 
++/* x1-r09: confirmed verbatim against booting L4T 4.9.140-l4t. */
++static const struct init_data mariko_pcie_lane_defaults[] = {
++	{ .cfg_addr = 0x97, .cfg_wdata = 0x0080 },
++};
++
+ struct tegra210_xusb_fuse_calibration {
+ 	u32 hs_curr_level[4];
+ 	u32 hs_term_range_adj;
+@@ -555,6 +560,10 @@
+ 			return err;
+ 	}
+ 
++	/* x1-r09: trace the Mariko PLL branch before any early exit. */
++	dev_info(padctl->dev, "x1-r09-uphy: b01=%d hwseq=%d\n",
++		 t210b01_compatible(padctl),
++		 plle_hw_sequence_is_enabled(padctl));
+ 	if (plle_hw_sequence_is_enabled(padctl))
+ 		goto skip_pll_init;
+ 
+@@ -563,30 +572,51 @@
+ 		goto disable;
+ 
+ 	if (t210b01_compatible(padctl) == 1) {
++		/* L4T 4.9 Mariko path: tune active PCIe lanes before PLL calibration. */
++		for (i = 0; i < padctl->pcie->soc->num_lanes; i++) {
++			struct tegra_xusb_lane *lane;
++			unsigned int j;
++
++			if (!padctl->pcie->lanes[i])
++				continue;
++			lane = phy_get_drvdata(padctl->pcie->lanes[i]);
++			if (!tegra_xusb_lane_check(lane, "pcie-x1") &&
++			    !tegra_xusb_lane_check(lane, "pcie-x4"))
++				continue;
++			for (j = 0; j < ARRAY_SIZE(mariko_pcie_lane_defaults); j++) {
++				value = CFG_ADDR(mariko_pcie_lane_defaults[j].cfg_addr) |
++					CFG_WDATA(mariko_pcie_lane_defaults[j].cfg_wdata) |
++					CFG_RESET | CFG_WS;
++				padctl_writel(padctl, value,
++					     XUSB_PADCTL_UPHY_MISC_PAD_PX_CTL8(lane->index));
++			}
++			dev_info(padctl->dev, "x1-r09-uphy: tuned pcie lane %u\n",
++				 lane->index);
++		}
++		/* B01-specific indirect PLL table; do not overwrite with T210 fields. */
+ 		for (i = 0; i < ARRAY_SIZE(usb3_pll_g1_init_data); i++) {
+-			value = 0;
+-			value |= CFG_ADDR(usb3_pll_g1_init_data[i].cfg_addr);
+-			value |= CFG_WDATA(usb3_pll_g1_init_data[i].cfg_wdata);
+-			value |= CFG_RESET;
+-			value |= CFG_WS;
+-			padctl_writel(padctl, value,
+-					XUSB_PADCTL_UPHY_PLL_S0_CTL10);
++			value = CFG_ADDR(usb3_pll_g1_init_data[i].cfg_addr) |
++				CFG_WDATA(usb3_pll_g1_init_data[i].cfg_wdata) |
++				CFG_RESET | CFG_WS;
++			padctl_writel(padctl, value, XUSB_PADCTL_UPHY_PLL_P0_CTL10);
+ 		}
+-	}
+-
+-	value = padctl_readl(padctl, XUSB_PADCTL_UPHY_PLL_P0_CTL2);
+-	value &= ~(XUSB_PADCTL_UPHY_PLL_CTL2_CAL_CTRL_MASK <<
+-		   XUSB_PADCTL_UPHY_PLL_CTL2_CAL_CTRL_SHIFT);
+-	value |= XUSB_PADCTL_UPHY_PLL_CTL2_CAL_CTRL_VAL <<
+-		 XUSB_PADCTL_UPHY_PLL_CTL2_CAL_CTRL_SHIFT;
+-	padctl_writel(padctl, value, XUSB_PADCTL_UPHY_PLL_P0_CTL2);
+-
+-	value = padctl_readl(padctl, XUSB_PADCTL_UPHY_PLL_P0_CTL5);
+-	value &= ~(XUSB_PADCTL_UPHY_PLL_CTL5_DCO_CTRL_MASK <<
+-		   XUSB_PADCTL_UPHY_PLL_CTL5_DCO_CTRL_SHIFT);
+-	value |= XUSB_PADCTL_UPHY_PLL_CTL5_DCO_CTRL_VAL <<
+-		 XUSB_PADCTL_UPHY_PLL_CTL5_DCO_CTRL_SHIFT;
+-	padctl_writel(padctl, value, XUSB_PADCTL_UPHY_PLL_P0_CTL5);
++		dev_info(padctl->dev, "x1-r09-uphy: applied Mariko G1 PLL table\n");
++	} else {
++		/* Erista/T210 exclusively uses the direct CAL_CTRL and DCO_CTRL. */
++		value = padctl_readl(padctl, XUSB_PADCTL_UPHY_PLL_P0_CTL2);
++		value &= ~(XUSB_PADCTL_UPHY_PLL_CTL2_CAL_CTRL_MASK <<
++			   XUSB_PADCTL_UPHY_PLL_CTL2_CAL_CTRL_SHIFT);
++		value |= XUSB_PADCTL_UPHY_PLL_CTL2_CAL_CTRL_VAL <<
++			 XUSB_PADCTL_UPHY_PLL_CTL2_CAL_CTRL_SHIFT;
++		padctl_writel(padctl, value, XUSB_PADCTL_UPHY_PLL_P0_CTL2);
++
++		value = padctl_readl(padctl, XUSB_PADCTL_UPHY_PLL_P0_CTL5);
++		value &= ~(XUSB_PADCTL_UPHY_PLL_CTL5_DCO_CTRL_MASK <<
++			   XUSB_PADCTL_UPHY_PLL_CTL5_DCO_CTRL_SHIFT);
++		value |= XUSB_PADCTL_UPHY_PLL_CTL5_DCO_CTRL_VAL <<
++			 XUSB_PADCTL_UPHY_PLL_CTL5_DCO_CTRL_SHIFT;
++		padctl_writel(padctl, value, XUSB_PADCTL_UPHY_PLL_P0_CTL5);
++	}
+ 
+ 	value = padctl_readl(padctl, XUSB_PADCTL_UPHY_PLL_P0_CTL1);
+ 	value |= XUSB_PADCTL_UPHY_PLL_CTL1_PWR_OVRD;
+@@ -635,6 +665,7 @@
+ 	padctl_writel(padctl, value, XUSB_PADCTL_UPHY_PLL_P0_CTL4);
+ 
+ 	value = padctl_readl(padctl, XUSB_PADCTL_UPHY_PLL_P0_CTL2);
++	dev_info(padctl->dev, "x1-r09-uphy: CAL_CTL2_pre=0x%08x\n", value);
+ 	value |= XUSB_PADCTL_UPHY_PLL_CTL2_CAL_EN;
+ 	padctl_writel(padctl, value, XUSB_PADCTL_UPHY_PLL_P0_CTL2);
+ 
+@@ -649,10 +680,12 @@
+ 	}
+ 
+ 	if (time_after_eq(jiffies, timeout)) {
++		dev_err(padctl->dev, "x1-r09-uphy: CAL_DONE timeout, CTL2=0x%08x\n", value);
+ 		err = -ETIMEDOUT;
+ 		goto reset;
+ 	}
+ 
++	dev_info(padctl->dev, "x1-r09-uphy: CAL_DONE CTL2=0x%08x\n", value);
+ 	value = padctl_readl(padctl, XUSB_PADCTL_UPHY_PLL_P0_CTL2);
+ 	value &= ~XUSB_PADCTL_UPHY_PLL_CTL2_CAL_EN;
+ 	padctl_writel(padctl, value, XUSB_PADCTL_UPHY_PLL_P0_CTL2);
