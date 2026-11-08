@@ -47,3 +47,10 @@ This is an independent community project, **not affiliated with Nintendo or NVID
 ## Critical recovery rule
 
 **Never replace the default Hekate entry or the known-good L4T rescue setup during experimentation.** Only create separately named test slots, verify hashes, use physical/manual boot with a recovery route, and log actual hardware outcomes. See [RECOVERY.md](docs/RECOVERY.md).
+
+
+## License and authorship
+
+Original kernel-related project contributions and patches are offered under **GNU GPLv2 only** (`GPL-2.0-only`) to align with the Linux kernel licensing baseline, to the extent the project has rights to license them. Copyright (C) 2026 [Garyu-tt](https://github.com/Garyu-tt) for original contributions. See [LICENSE](LICENSE) and [AUTHORS.md](AUTHORS.md).
+
+Upstream Linux, Linux-NX, third-party patches, sample snapshots and other imported material retain their own copyright and license notices; this declaration does not supersede upstream rights or applicable Linux syscall exceptions.
