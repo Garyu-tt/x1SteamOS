@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-2.0-only
+# Prototype only; not official Proxmox VE.
+set -Eeuo pipefail
+CONF=${SVP_CONFIG_FILE:-/etc/sv-proxmox.conf}
+VM_DISK=/var/lib/sv-proxmox/guest.qcow2
+FIRMWARE_CODE=/usr/share/qemu-efi-aarch64/QEMU_EFI.fd
+QEMU_BIN=qemu-system-aarch64
+RAM_MB=1024
+VCPUS=2
+VNC_DISPLAY=4
+ACCEL=auto
+[[ ! -f "$CONF" ]] || source "$CONF"
+die(){ echo "sv-proxmox: $*" >&2; exit 1; }
+have_kvm(){ [[ -c /dev/kvm && -r /dev/kvm && -w /dev/kvm ]]; }
+probe(){
+  uname -a
+  if have_kvm; then echo "KVM: accessible"; else echo "KVM: unavailable (EL2/kernel permissions unverified)"; fi
+  for x in "$QEMU_BIN" /dev/fb0 /dev/dri/card0; do
+    if [[ "$x" == /* ]]; then [[ ! -e "$x" ]] || ls -l "$x"; else command -v "$x" || :; fi
+  done
+  [[ ! -r "$FIRMWARE_CODE" ]] || echo "UEFI available: $FIRMWARE_CODE"
+  [[ ! -r "$VM_DISK" ]] || echo "Guest disk readable: $VM_DISK"
+  echo "Hardware Wi-Fi, Tegra GPU/panel and physical storage remain host-owned"
+}
+run(){
+  [[ "$(uname -m)" == aarch64 ]] || die "ARM64 host required"
+  command -v "$QEMU_BIN" >/dev/null || die "QEMU unavailable"
+  [[ -r "$VM_DISK" && -r "$FIRMWARE_CODE" ]] || die "Guest disk and ARM64 UEFI firmware required"
+  [[ "$RAM_MB" =~ ^[0-9]+$ ]] && (( RAM_MB >= 256 && RAM_MB <= 3072 )) || die "RAM_MB invalid"
+  [[ "$VCPUS" =~ ^[0-9]+$ ]] && (( VCPUS >= 1 && VCPUS <= 4 )) || die "VCPUS invalid"
+  [[ "$VNC_DISPLAY" =~ ^[0-9]+$ ]] && (( VNC_DISPLAY >= 0 && VNC_DISPLAY <= 99 )) || die "VNC_DISPLAY invalid"
+  case "$ACCEL" in
+    auto|kvm) have_kvm || die "KVM unavailable; TCG is opt-in only"; accel=kvm; cpu=host ;;
+    tcg) accel=tcg; cpu=cortex-a57 ;;
+    *) die "Unknown ACCEL" ;;
+  esac
+  exec "$QEMU_BIN" -nodefaults -machine "virt,accel=$accel" -cpu "$cpu" \
+    -smp "$VCPUS" -m "$RAM_MB" -bios "$FIRMWARE_CODE" \
+    -drive "file=$VM_DISK,format=qcow2,if=none,id=osdisk" \
+    -device virtio-blk-pci,drive=osdisk \
+    -netdev user,id=net0 -device virtio-net-pci,netdev=net0 \
+    -device virtio-gpu-pci \
+    -device qemu-xhci -device usb-kbd -device usb-tablet \
+    -vnc "127.0.0.1:$VNC_DISPLAY" -display none \
+    -serial null -monitor none
+}
+case "${1:-help}" in
+  probe) probe ;;
+  run) run ;;
+  start|stop|status) systemctl "$1" sv-proxmox.service ;;
+  viewer)
+    [[ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]] || die "A minimal local X11/Wayland viewer session is required"
+    command -v vncviewer >/dev/null || die "Install vncviewer"
+    exec vncviewer -FullScreen "127.0.0.1:$VNC_DISPLAY" ;;
+  *) echo "Usage: sv-proxmox probe|run|start|stop|status|viewer" ;;
+esac
