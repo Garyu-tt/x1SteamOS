@@ -1,0 +1,9 @@
+# sv-proxmox prototype; not PVE.
+# Keep physical Wi-Fi and Tegra graphics on the L4T host.
+VM_DISK=/var/lib/sv-proxmox/guest.qcow2
+FIRMWARE_CODE=/usr/share/qemu-efi-aarch64/QEMU_EFI.fd
+QEMU_BIN=qemu-system-aarch64
+RAM_MB=1024
+VCPUS=2
+VNC_DISPLAY=4
+ACCEL=auto
