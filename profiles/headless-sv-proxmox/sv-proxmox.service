@@ -1,0 +1,20 @@
+[Unit]
+Description=Switch Lite headless sv-proxmox ARM64 QEMU guest (experimental)
+After=local-fs.target network.target
+ConditionPathExists=/etc/sv-proxmox.conf
+
+[Service]
+Type=simple
+User=svproxmox
+Group=svproxmox
+WorkingDirectory=/var/lib/sv-proxmox
+ExecStart=/usr/local/bin/sv-proxmox run
+Restart=no
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/sv-proxmox
+
+[Install]
+WantedBy=multi-user.target
